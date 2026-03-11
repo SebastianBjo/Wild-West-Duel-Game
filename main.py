@@ -1,40 +1,208 @@
 import pygame
 import random
-import math
 import sys
 
-# -----------------------------
-# Configuration / Constants
-# -----------------------------
 WIDTH, HEIGHT = 1000, 600
-FPS = 60
+GROUND = HEIGHT - 120
 
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-SKY = (200, 220, 255)
-SAND = (210, 185, 140)
-DARK_OVERLAY = (0, 0, 0, 120)
+WHITE = (255,255,255)
+BLACK = (0,0,0)
+SAND = (210,185,140)
+SKY = (200,220,255)
+FLASH = (255,220,120)
 
-# Positions
-GROUND_Y = HEIGHT - 120
-PLAYER_X = WIDTH * 0.25
-ENEMY_X = WIDTH * 0.75
-COWBOY_WIDTH, COWBOY_HEIGHT = 40, 100
+PLAYER_X = WIDTH*0.25
+ENEMY_X = WIDTH*0.75
 
-# Deadeye timings (seconds)
-MIN_DRAW_DELAY = 1.0
-MAX_DRAW_DELAY = 3.5
-DEADEYE_DURATION = 2.2  # seconds allowed to mark shots (1-3 recommended)
-SHOT_RESOLVE_DELAY = 0.25  # seconds between each marked shot resolving visually
+pygame.init()
+screen = pygame.display.set_mode((WIDTH,HEIGHT))
+pygame.display.set_caption("Western Quickdraw Duel")
+clock = pygame.time.Clock()
 
-# Enemy stats (tweakable)
-ENEMY_BASE_REACTION = 0.5  # base seconds before enemy fires after DRAW!
-ENEMY_REACTION_VARIANCE = 0.3
-ENEMY_ACCURACY = 0.7  # probability to hit if not disarmed/shot first
+font = pygame.font.SysFont("arial",36)
+bigfont = pygame.font.SysFont("arial",80)
 
-# Shot hitzones relative to enemy rect (for easier aiming & resolution)
-HITZONES = {
+class Bullet:
+    def __init__(self,x,y,dir):
+        self.x = x
+        self.y = y
+        self.dir = dir
+        self.speed = 900
+        self.active = True
+
+    def update(self,dt):
+        self.x += self.speed*self.dir*dt
+        if self.x < 0 or self.x > WIDTH:
+            self.active = False
+
+    def draw(self):
+        pygame.draw.circle(screen,FLASH,(int(self.x),int(self.y)),5)
+
+class Cowboy:
+    def __init__(self,x,facing_right):
+        self.x = x
+        self.y = GROUND
+        self.facing_right = facing_right
+        self.alive = True
+        self.flash_timer = 0
+
+    def draw(self):
+        x = int(self.x)
+        y = int(self.y)
+
+        # legs
+        pygame.draw.line(screen,(40,40,40),(x-8,y),(x-10,y-40),4)
+        pygame.draw.line(screen,(40,40,40),(x+8,y),(x+10,y-40),4)
+
+        # torso
+        pygame.draw.rect(screen,(140,70,20),(x-12,y-80,24,40))
+
+        # head
+        pygame.draw.circle(screen,(255,220,180),(x,y-95),10)
+
+        # hat
+        pygame.draw.rect(screen,(60,40,20),(x-16,y-108,32,8))
+        pygame.draw.rect(screen,(60,40,20),(x-8,y-120,16,12))
+
+        # gun arm
+        if self.facing_right:
+            gunx = x+36
+            pygame.draw.line(screen,(30,30,30),(x+12,y-60),(gunx,y-55),4)
+        else:
+            gunx = x-36
+            pygame.draw.line(screen,(30,30,30),(x-12,y-60),(gunx,y-55),4)
+
+        pygame.draw.rect(screen,(60,60,60),(gunx-6,y-58,12,6))
+
+        # muzzle flash
+        if self.flash_timer > 0:
+            pygame.draw.circle(screen,FLASH,(gunx+8 if self.facing_right else gunx-8,y-55),8)
+
+    def update(self,dt):
+        if self.flash_timer > 0:
+            self.flash_timer -= dt
+
+player = Cowboy(PLAYER_X,True)
+enemy = Cowboy(ENEMY_X,False)
+
+bullets = []
+
+state = "wait"
+result = ""
+
+draw_delay = random.uniform(2,4)
+enemy_reaction = random.uniform(0.23,0.35)
+
+timer = 0
+draw_time = 0
+
+player_fired = False
+enemy_fired = False
+
+def reset():
+    global player,enemy,bullets,state,result,timer,draw_delay,enemy_reaction,draw_time,player_fired,enemy_fired
+    player = Cowboy(PLAYER_X,True)
+    enemy = Cowboy(ENEMY_X,False)
+    bullets = []
+    state = "wait"
+    result = ""
+    timer = 0
+    draw_delay = random.uniform(2,4)
+    enemy_reaction = random.uniform(0.23,0.35)
+    draw_time = 0
+    player_fired = False
+    enemy_fired = False
+
+def player_fire():
+    global player_fired
+    if player_fired: return
+    player_fired = True
+    player.flash_timer = 0.1
+    bullets.append(Bullet(player.x,player.y-60,1))
+
+def enemy_fire():
+    global enemy_fired
+    if enemy_fired: return
+    enemy_fired = True
+    enemy.flash_timer = 0.1
+    bullets.append(Bullet(enemy.x,enemy.y-60,-1))
+
+while True:
+
+    dt = clock.tick(60)/1000
+    timer += dt
+
+    for event in pygame.event.get():
+
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+
+        if event.type == pygame.KEYDOWN:
+
+            if event.key == pygame.K_r:
+                reset()
+
+            if event.key == pygame.K_SPACE:
+
+                if state == "wait":
+                    result = "TOO EARLY!"
+                    state = "result"
+
+                elif state == "draw":
+                    player_fire()
+
+    if state == "wait":
+        if timer >= draw_delay:
+            state = "draw"
+            draw_time = timer
+
+    if state == "draw":
+        if not enemy_fired and timer-draw_time >= enemy_reaction:
+            enemy_fire()
+
+    for b in bullets:
+        b.update(dt)
+
+        if b.dir > 0 and enemy.alive and abs(b.x-enemy.x) < 20:
+            enemy.alive = False
+            result = "YOU WIN"
+            state = "result"
+
+        if b.dir < 0 and player.alive and abs(b.x-player.x) < 20:
+            player.alive = False
+            result = "YOU LOSE"
+            state = "result"
+
+    bullets = [b for b in bullets if b.active]
+
+    player.update(dt)
+    enemy.update(dt)
+
+    screen.fill(SKY)
+    pygame.draw.rect(screen,SAND,(0,GROUND,WIDTH,200))
+
+    player.draw()
+    enemy.draw()
+
+    for b in bullets:
+        b.draw()
+
+    if state == "wait":
+        t = font.render("Wait for DRAW...",True,BLACK)
+        screen.blit(t,(WIDTH/2-120,40))
+
+    if state == "draw":
+        t = bigfont.render("DRAW!",True,(180,30,30))
+        screen.blit(t,(WIDTH/2-120,40))
+
+    if state == "result":
+        t = bigfont.render(result,True,BLACK)
+        screen.blit(t,(WIDTH/2-180,HEIGHT/2))
+        r = font.render("Press R to restart",True,BLACK)
+        screen.blit(r,(WIDTH/2-140,HEIGHT/2+80))
+
+    pygame.display.flip()HITZONES = {
     'head': lambda r: pygame.Rect(r.centerx - 12, r.top - 10, 24, 24),
     'chest': lambda r: pygame.Rect(r.centerx - 18, r.top + 20, 36, 36),
     'arm': lambda r: pygame.Rect(r.left - 8, r.top + 30, 28, 28),
