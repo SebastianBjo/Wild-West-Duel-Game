@@ -1,20 +1,3 @@
-"""
-2D Western Duel Game (Pygame)
-
-Controls:
- - Arrow keys or mouse: move reticle during Deadeye
- - SPACE: mark shot (if in Deadeye) OR (if pressed too early => automatic loss)
- - R: restart after a duel
-
-Run: python western_duel_game.py
-
-This script is intentionally self-contained and uses simple shapes for sprites so you
-can run it without any art assets. If you want to add sprites or sound files, drop them
-in the same folder and update the file paths near the top.
-
-Author: ChatGPT (as requested by Sebastian)
-"""
-
 import pygame
 import random
 import math
@@ -76,6 +59,21 @@ def clamp(n, minn, maxn):
 # -----------------------------
 # Classes
 # -----------------------------
+class Bullet:
+    def __init__(self, x, y, direction):
+        self.x = x
+        self.y = y
+        self.speed = 900
+        self.direction = direction
+        self.active = True
+
+    def update(self, dt):
+        self.x += self.speed * self.direction * dt
+        if self.x < 0 or self.x > WIDTH:
+            self.active = False
+
+    def draw(self, surf):
+        pygame.draw.circle(surf, (255,220,120), (int(self.x), int(self.y)), 4)
 
 class Cowboy:
     def __init__(self, x, y, facing_right=False):
